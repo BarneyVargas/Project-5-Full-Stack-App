@@ -1,97 +1,35 @@
 import { useEffect, useState } from "react";
+import TaskForm from "./components/TaskForm";
+import TaskList from "./components/TaskList";
 
 const API = import.meta.env.VITE_API_URL;
 
 export default function App() {
   const [tasks, setTasks] = useState([]);
   const [title, setTitle] = useState("");
-  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [errMsg, setErrMsg] = useState("");
 
   async function loadTasks() {
-    setError("");
+    setLoading(true);
+    setErrMsg("");
+
     try {
       const res = await fetch(`${API}/tasks`);
       const data = await res.json();
 
       if (!res.ok) {
-        throw new Error(data?.error || "Failed to load tasks");
+        setTasks([]); // avoid tasks.map crash
+        setErrMsg(data?.error || "Failed to load tasks");
+        return;
       }
 
       setTasks(Array.isArray(data) ? data : []);
-    } catch (e) {
+    } catch (err) {
       setTasks([]);
-      setError(e.message);
-    }
-  }
-
-  async function addTask(e) {
-    e.preventDefault();
-    setError("");
-
-    try {
-      const res = await fetch(`${API}/tasks`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ title }),
-      });
-      const data = await res.json();
-
-      if (!res.ok) throw new Error(data?.error || "Failed to add task");
-
-      setTitle("");
-      await loadTasks();
-    } catch (e) {
-      setError(e.message);
-    }
-  }
-
-  async function toggleTask(task) {
-    setError("");
-    try {
-      const res = await fetch(`${API}/tasks/${task.id}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ is_done: !task.is_done }),
-      });
-      const data = await res.json();
-
-      if (!res.ok) throw new Error(data?.error || "Failed to update task");
-
-      await loadTasks();
-    } catch (e) {
-      setError(e.message);
-    }
-  }
-
-  async function updateTitle(task, newTitle) {
-    setError("");
-    try {
-      const res = await fetch(`${API}/tasks/${task.id}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ title: newTitle }),
-      });
-      const data = await res.json();
-
-      if (!res.ok) throw new Error(data?.error || "Failed to rename task");
-
-      await loadTasks();
-    } catch (e) {
-      setError(e.message);
-    }
-  }
-
-  async function deleteTask(id) {
-    setError("");
-    try {
-      const res = await fetch(`${API}/tasks/${id}`, { method: "DELETE" });
-      const data = await res.json();
-
-      if (!res.ok) throw new Error(data?.error || "Failed to delete task");
-
-      await loadTasks();
-    } catch (e) {
-      setError(e.message);
+      setErrMsg(err.message || "Network error");
+    } finally {
+      setLoading(false);
     }
   }
 
@@ -99,42 +37,114 @@ export default function App() {
     loadTasks();
   }, []);
 
+  async function addTask(e) {
+    e.preventDefault();
+    if (!title.trim()) return;
+
+    setErrMsg("");
+    try {
+      const res = await fetch(`${API}/tasks`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title: title.trim() }),
+      });
+      const data = await res.json();
+      if (!res.ok) return setErrMsg(data?.error || "Failed to add task");
+
+      setTitle("");
+      loadTasks();
+    } catch (err) {
+      setErrMsg(err.message || "Network error");
+    }
+  }
+
+  async function toggleTask(task) {
+    setErrMsg("");
+    try {
+      const res = await fetch(`${API}/tasks/${task.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: task.title,
+          is_done: !task.is_done,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) return setErrMsg(data?.error || "Failed to update task");
+      loadTasks();
+    } catch (err) {
+      setErrMsg(err.message || "Network error");
+    }
+  }
+
+  async function editTask(task) {
+    const next = prompt("New title:", task.title);
+    if (next === null) return; // cancelled
+    if (!next.trim()) return;
+
+    setErrMsg("");
+    try {
+      const res = await fetch(`${API}/tasks/${task.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: next.trim(),
+          is_done: task.is_done,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) return setErrMsg(data?.error || "Failed to edit task");
+      loadTasks();
+    } catch (err) {
+      setErrMsg(err.message || "Network error");
+    }
+  }
+
+  async function deleteTask(id) {
+    setErrMsg("");
+    try {
+      const res = await fetch(`${API}/tasks/${id}`, { method: "DELETE" });
+      const data = await res.json();
+      if (!res.ok) return setErrMsg(data?.error || "Failed to delete task");
+      loadTasks();
+    } catch (err) {
+      setErrMsg(err.message || "Network error");
+    }
+  }
+
   return (
-    <div
-      style={{ maxWidth: 520, margin: "40px auto", fontFamily: "system-ui" }}
-    >
-      <h1>Task Tracker</h1>
+    <div className="min-h-screen bg-white p-6">
+      <div className="mx-auto max-w-xl">
+        <div className="mb-6 rounded-2xl border p-6 shadow-sm">
+          <h1 className="text-2xl font-semibold">Task Tracker</h1>
+          <p className="mt-1 text-sm opacity-70">
+            React + Express + Postgres (Supabase)
+          </p>
 
-      {error && (
-        <p style={{ color: "crimson", background: "#ffe6e6", padding: 10 }}>
-          {error}
-        </p>
-      )}
+          <div className="mt-4">
+            <TaskForm title={title} setTitle={setTitle} onAdd={addTask} />
+          </div>
 
-      <form onSubmit={addTask} style={{ display: "flex", gap: 8 }}>
-        <input
-          value={title}
-          onChange={(e) => setTitle(e.target.value)}
-          placeholder="New task..."
-          style={{ flex: 1, padding: 10 }}
-        />
-        <button style={{ padding: "10px 14px" }}>Add</button>
-      </form>
+          {errMsg ? (
+            <div className="mt-3 rounded-lg border border-red-200 bg-red-50 p-3 text-sm">
+              {errMsg}
+            </div>
+          ) : null}
 
-      <ul style={{ marginTop: 20, paddingLeft: 18 }}>
-        {tasks.map((t) => (
-          <li key={t.id} style={{ marginBottom: 10 }}>
-            <input
-              type="checkbox"
-              checked={t.is_done}
-              onChange={() => toggleTask(t)}
-              style={{ marginRight: 8 }}
+          {loading ? (
+            <p className="mt-4 text-sm opacity-70">Loading…</p>
+          ) : tasks.length === 0 ? (
+            <p className="mt-4 text-sm opacity-70">No tasks yet.</p>
+          ) : (
+            <TaskList
+              tasks={tasks}
+              onToggle={toggleTask}
+              onDelete={deleteTask}
+              onEdit={editTask}
             />
-            <span style={{ marginRight: 10 }}>{t.title}</span>
-            <button onClick={() => deleteTask(t.id)}>X</button>
-          </li>
-        ))}
-      </ul>
+          )}
+        </div>
+      </div>
     </div>
   );
 }
