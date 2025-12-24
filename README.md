@@ -31,7 +31,3 @@ This project is a full-stack CRUD application that allows users to create, read,
 - `pg` library
 - Supabase (database hosting)
 
----
-
-## Project Structure
-
